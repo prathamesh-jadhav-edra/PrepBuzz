@@ -1,0 +1,4 @@
+output/
+qdrant_storage/
+rules/
+*__pycache__*

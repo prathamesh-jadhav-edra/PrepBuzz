@@ -1,0 +1,24 @@
+# Core dependencies
+qdrant-client==1.7.0
+python-dotenv==1.0.0
+click==8.1.7
+pydantic==2.5.2
+
+# LLM providers
+openai==1.12.0
+anthropic==0.18.0
+requests==2.31.0
+
+# Video/Audio generation
+opencv-python==4.9.0.80
+Pillow==10.2.0
+gtts==2.4.0
+moviepy==1.0.3
+
+# Search and web scraping
+google-api-python-client==2.116.0
+beautifulsoup4==4.12.2
+
+# Utilities
+tqdm==4.66.1
+loguru==0.7.2
