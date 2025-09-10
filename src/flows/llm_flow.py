@@ -1,7 +1,7 @@
 """LLM processing flow for formatting reasoning."""
 
 from typing import Dict, Any
-from ..core.flow_engine import BaseFlow, FlowResult, register_flow
+from ..core.unified_flow_engine import BaseFlow, FlowResult, register_flow
 from ..core.llm_factory import llm_provider
 
 

@@ -1,7 +1,7 @@
 """Question selection flow."""
 
 from typing import Dict, Any
-from ..core.flow_engine import BaseFlow, FlowResult, register_flow
+from ..core.unified_flow_engine import BaseFlow, FlowResult, register_flow
 from ..core.database import db
 
 

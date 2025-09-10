@@ -2,7 +2,7 @@
 
 from .database import db, DatabaseManager, CATQuestion
 from .llm_factory import llm_provider, LLMFactory, LLMProvider
-from .flow_engine import flow_engine, flow_registry, BaseFlow, FlowResult, register_flow
+from .unified_flow_engine import unified_engine, BaseFlow, FlowResult, register_flow
 
 __all__ = [
     "db",
@@ -11,8 +11,7 @@ __all__ = [
     "llm_provider",
     "LLMFactory",
     "LLMProvider",
-    "flow_engine",
-    "flow_registry",
+    "unified_engine",
     "BaseFlow",
     "FlowResult",
     "register_flow",

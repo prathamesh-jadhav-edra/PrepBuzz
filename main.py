@@ -4,7 +4,7 @@ import click
 import sys
 import warnings
 from loguru import logger
-from src.core import flow_engine, db
+from src.core import db, unified_engine
 from src.flows import *  # Import all flows to register them
 from src.utils.config import config
 
@@ -32,11 +32,17 @@ def cli():
     help="Subject to filter questions by",
 )
 @click.option("--count", default=1, help="Number of videos to generate")
-def generate(subject, count):
+@click.option("--agentic", is_flag=True, help="Enable intelligent agentic processing")
+def generate(subject, count, agentic):
     """Generate educational videos from CAT questions."""
     click.echo(f"🚀 Starting PrepBuzz video generation...")
     click.echo(f"📊 Subject filter: {subject or 'All subjects'}")
     click.echo(f"🎬 Videos to generate: {count}")
+    
+    if agentic:
+        click.echo("🤖 Agentic mode: ENABLED - Using intelligent agent coordination")
+    else:
+        click.echo("⚙️  Standard mode: Using traditional pipeline processing")
 
     # Check if database has questions
     question_count = db.get_question_count()
@@ -49,7 +55,7 @@ def generate(subject, count):
     # Define processing pipeline
     pipeline = [
         "question_selection",
-        "reasoning_extraction",
+        "reasoning_extraction", 
         "llm_processing",
         "video_generation",
     ]
@@ -66,12 +72,28 @@ def generate(subject, count):
 
         # Execute pipeline
         try:
-            result = flow_engine.execute_pipeline(pipeline, input_data)
+            result = unified_engine.execute_pipeline(
+                pipeline, input_data, agentic=agentic
+            )
 
             if result.success:
                 video_path = result.data.get("video_path")
                 click.echo(f"✅ Video generated successfully: {video_path}")
                 successful_generations += 1
+     
+                # Show agentic insights if available
+                if agentic and result.metadata:
+                    if "agent_analysis" in result.metadata:
+                        analysis = result.metadata["agent_analysis"]
+                        click.echo(f"🧠 Analysis: {analysis.get('insights', 'N/A')}")
+  
+                    if "confidence" in result.metadata:
+                        confidence = result.metadata["confidence"]
+                        click.echo(f"📊 Confidence: {confidence:.0%}")
+      
+                    if "execution_time" in result.metadata:
+                        exec_time = result.metadata["execution_time"]
+                        click.echo(f"⏱️  Processing time: {exec_time:.1f}s")
             else:
                 click.echo(f"❌ Video generation failed: {result.error}")
 
@@ -111,7 +133,6 @@ def status():
 
     # LLM status
     from src.core.llm_factory import LLMFactory
-
     providers = LLMFactory.get_available_providers()
     click.echo(f"🤖 LLM Providers: {', '.join(providers)}")
 
@@ -121,9 +142,11 @@ def status():
     else:
         click.echo("🆓 Using free/local LLM")
 
-    # Flows status
-    available_flows = flow_engine.registry.get_available_flows()
+    # Engine status
+    engine_status = unified_engine.get_status()
+    available_flows = engine_status["available_flows"]
     click.echo(f"⚙️  Available Flows: {', '.join(available_flows)}")
+    click.echo(f"🤖 Agent Capabilities: {', '.join(engine_status['agent_capabilities'])}")
 
     # Output directory
     click.echo(f"📁 Output Directory: {config.output_dir}")
@@ -197,19 +220,23 @@ def setup():
 
 
 @cli.command()
-def test():
+@click.option("--agentic", is_flag=True, help="Test in agentic mode")
+def test(agentic):
     """Test the complete pipeline with a sample question."""
     click.echo("🧪 Testing complete pipeline...")
+    
+    if agentic:
+        click.echo("🤖 Testing in agentic mode with intelligent processing")
+    else:
+        click.echo("⚙️  Testing in standard mode")
 
     # Check if we have questions
     question_count = db.get_question_count()
     if question_count == 0:
         click.echo("❌ No questions found. Running setup first...")
-        # Run setup
         from click.testing import CliRunner
-
         runner = CliRunner()
-        result = runner.invoke(setup)
+        runner.invoke(setup)
 
     # Test pipeline
     pipeline = [
@@ -220,12 +247,24 @@ def test():
     ]
 
     click.echo("🔄 Testing pipeline flows...")
-    result = flow_engine.execute_pipeline(pipeline)
+    result = unified_engine.execute_pipeline(pipeline, agentic=agentic)
 
     if result.success:
         click.echo("✅ Pipeline test successful!")
         if "video_path" in result.data:
             click.echo(f"🎬 Test video: {result.data['video_path']}")
+        
+        # Show agentic insights
+        if agentic and result.metadata:
+            click.echo("\n🤖 Agentic Test Results:")
+            if "confidence" in result.metadata:
+                click.echo(f"📊 Confidence: {result.metadata['confidence']:.0%}")
+            if "execution_time" in result.metadata:
+                click.echo(f"⏱️  Execution time: {result.metadata['execution_time']:.1f}s")
+            if "strategy_used" in result.metadata:
+                strategy = result.metadata["strategy_used"]
+                click.echo(f"🎯 Strategy used: {strategy}")
+                
     else:
         click.echo(f"❌ Pipeline test failed: {result.error}")
 
