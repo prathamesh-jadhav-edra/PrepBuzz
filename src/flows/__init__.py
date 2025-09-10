@@ -1,7 +1,7 @@
 """Flows module - Contains all processing flows."""
 
 from .question_flow import QuestionSelectionFlow
-from .reasoning_flow import ReasoningExtractionFlow  
+from .reasoning_flow import ReasoningExtractionFlow
 from .llm_flow import LLMProcessingFlow
 from .video_flow import VideoGenerationFlow
 
@@ -13,7 +13,7 @@ from . import video_flow
 
 __all__ = [
     "QuestionSelectionFlow",
-    "ReasoningExtractionFlow", 
+    "ReasoningExtractionFlow",
     "LLMProcessingFlow",
-    "VideoGenerationFlow"
+    "VideoGenerationFlow",
 ]

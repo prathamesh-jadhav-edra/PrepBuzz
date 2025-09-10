@@ -3,7 +3,6 @@
 import openai
 import anthropic
 import requests
-import json
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -16,12 +15,12 @@ from .math_solver import MathematicalSolver, MathSolution
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
-    
+
     @abstractmethod
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
         """Generate text response from prompt."""
         pass
-    
+
     @abstractmethod
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """Generate text embedding."""
@@ -30,12 +29,12 @@ class LLMProvider(ABC):
 
 class OpenAIProvider(LLMProvider):
     """OpenAI API provider."""
-    
+
     def __init__(self, api_key: str):
         """Initialize OpenAI client."""
         self.client = openai.OpenAI(api_key=api_key)
         self.name = "OpenAI GPT-4"
-    
+
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
         """Generate text using OpenAI GPT-4."""
         try:
@@ -43,23 +42,22 @@ class OpenAIProvider(LLMProvider):
                 model="gpt-4-turbo-preview",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
-                temperature=0.7
+                temperature=0.7,
             )
             return response.choices[0].message.content.strip()
-            
+
         except Exception as e:
             logger.error(f"OpenAI text generation failed: {e}")
             return None
-    
+
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """Generate embedding using OpenAI."""
         try:
             response = self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
+                model="text-embedding-3-small", input=text
             )
             return response.data[0].embedding
-            
+
         except Exception as e:
             logger.error(f"OpenAI embedding generation failed: {e}")
             return None
@@ -67,51 +65,54 @@ class OpenAIProvider(LLMProvider):
 
 class AnthropicProvider(LLMProvider):
     """Anthropic Claude API provider."""
-    
+
     def __init__(self, api_key: str):
         """Initialize Anthropic client."""
         self.client = anthropic.Anthropic(api_key=api_key)
         self.name = "Anthropic Claude"
-    
+
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
         """Generate text using Claude."""
         try:
             message = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
             return message.content[0].text.strip()
-            
+
         except Exception as e:
             logger.error(f"Anthropic text generation failed: {e}")
             return None
-    
+
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """Anthropic doesn't provide embeddings, fallback to free alternative."""
         logger.warning("Anthropic doesn't provide embeddings, using free alternative")
         return self._free_embedding(text)
-    
+
     def _free_embedding(self, text: str) -> Optional[List[float]]:
         """Simple hash-based embedding for fallback."""
         # This is a very basic fallback - in production you'd use sentence-transformers
         import hashlib
+
         text_hash = hashlib.sha256(text.encode()).hexdigest()
         # Convert to pseudo-embedding (1536 dimensions)
         embedding = []
         for i in range(0, len(text_hash), 2):
-            val = int(text_hash[i:i+2], 16) / 255.0 - 0.5  # Normalize to [-0.5, 0.5]
+            val = (
+                int(text_hash[i : i + 2], 16) / 255.0 - 0.5
+            )  # Normalize to [-0.5, 0.5]
             embedding.append(val)
-        
+
         # Pad or truncate to 1536 dimensions
         while len(embedding) < 1536:
-            embedding.extend(embedding[:min(len(embedding), 1536 - len(embedding))])
+            embedding.extend(embedding[: min(len(embedding), 1536 - len(embedding))])
         return embedding[:1536]
 
 
 class FreeLocalProvider(LLMProvider):
     """Free/Local LLM provider using multiple free sources."""
-    
+
     def __init__(self):
         """Initialize free provider."""
         self.name = "Intelligent Mathematical AI Provider"
@@ -119,7 +120,7 @@ class FreeLocalProvider(LLMProvider):
         print(f"Ollama available: {self.ollama_available}")
         self.huggingface_available = self._check_huggingface()
         self.math_solver = MathematicalSolver()
-    
+
     def _check_ollama(self) -> bool:
         """Check if Ollama is available locally and ensure llama2 is downloaded."""
         try:
@@ -127,35 +128,39 @@ class FreeLocalProvider(LLMProvider):
             if not self._ensure_ollama_running():
                 logger.warning("Could not start Ollama service")
                 return False
-            
+
             response = requests.get("http://localhost:11434/api/tags", timeout=5)
             if response.status_code == 200:
                 # Check if llama2 model is available
                 models = response.json()
-                available_models = [model.get('name', '').lower() for model in models.get('models', [])]
-                has_llama2 = any('llama2' in model for model in available_models)
-                
+                available_models = [
+                    model.get("name", "").lower() for model in models.get("models", [])
+                ]
+                has_llama2 = any("llama2" in model for model in available_models)
+
                 if not has_llama2:
-                    logger.info("Ollama is running but llama2 not found. Attempting to download...")
+                    logger.info(
+                        "Ollama is running but llama2 not found. Attempting to download..."
+                    )
                     if self._download_llama2():
                         logger.info("Successfully downloaded llama2")
                         return True
                     else:
                         logger.warning("Failed to download llama2")
                         return False
-                
+
                 logger.info("Ollama with llama2 is available and ready")
                 return True
             return False
         except Exception as e:
             logger.warning(f"Ollama check failed: {e}")
             return False
-    
+
     def _download_llama2(self) -> bool:
         """Download llama2 model using Ollama."""
         try:
             logger.info("Starting llama2 download. This may take several minutes...")
-            
+
             # Use subprocess to run ollama pull command
             process = subprocess.Popen(
                 ["ollama", "pull", "llama2"],
@@ -163,23 +168,27 @@ class FreeLocalProvider(LLMProvider):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                universal_newlines=True
+                universal_newlines=True,
             )
-            
+
             # Monitor the download progress
             while True:
                 output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
+                if output == "" and process.poll() is not None:
                     break
                 if output:
                     # Log download progress
-                    if 'pulling manifest' in output.lower() or 'downloading' in output.lower() or 'verifying' in output.lower():
+                    if (
+                        "pulling manifest" in output.lower()
+                        or "downloading" in output.lower()
+                        or "verifying" in output.lower()
+                    ):
                         logger.info(f"Download progress: {output.strip()}")
-                    elif 'success' in output.lower():
+                    elif "success" in output.lower():
                         logger.info(f"Download: {output.strip()}")
-            
+
             return_code = process.poll()
-            
+
             if return_code == 0:
                 logger.info("llama2 model downloaded successfully")
                 # Verify the model is now available
@@ -188,7 +197,7 @@ class FreeLocalProvider(LLMProvider):
             else:
                 logger.error(f"ollama pull failed with return code {return_code}")
                 return False
-                
+
         except subprocess.TimeoutExpired:
             logger.error("llama2 download timed out")
             process.kill()
@@ -199,19 +208,21 @@ class FreeLocalProvider(LLMProvider):
         except Exception as e:
             logger.error(f"Error downloading llama2: {e}")
             return False
-    
+
     def _verify_llama2_available(self) -> bool:
         """Verify that llama2 model is now available."""
         try:
             response = requests.get("http://localhost:11434/api/tags", timeout=10)
             if response.status_code == 200:
                 models = response.json()
-                available_models = [model.get('name', '').lower() for model in models.get('models', [])]
-                return any('llama2' in model for model in available_models)
+                available_models = [
+                    model.get("name", "").lower() for model in models.get("models", [])
+                ]
+                return any("llama2" in model for model in available_models)
         except Exception as e:
             logger.warning(f"Failed to verify llama2 availability: {e}")
         return False
-    
+
     def _ensure_ollama_running(self) -> bool:
         """Ensure Ollama service is running."""
         try:
@@ -221,7 +232,7 @@ class FreeLocalProvider(LLMProvider):
                 return True
         except:
             pass
-        
+
         try:
             logger.info("Starting Ollama service...")
             # Try to start Ollama in the background
@@ -229,35 +240,38 @@ class FreeLocalProvider(LLMProvider):
                 ["ollama", "serve"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                start_new_session=True
+                start_new_session=True,
             )
-            
+
             # Wait for service to start
             for _ in range(30):  # Wait up to 30 seconds
                 try:
                     time.sleep(1)
-                    response = requests.get("http://localhost:11434/api/tags", timeout=2)
+                    response = requests.get(
+                        "http://localhost:11434/api/tags", timeout=2
+                    )
                     if response.status_code == 200:
                         logger.info("Ollama service started successfully")
                         return True
                 except:
                     continue
-                    
+
             logger.error("Failed to start Ollama service")
             return False
-            
+
         except Exception as e:
             logger.error(f"Error starting Ollama: {e}")
             return False
-    
+
     def _check_huggingface(self) -> bool:
         """Check if HuggingFace transformers is available."""
         try:
             import transformers
+
             return True
         except ImportError:
             return False
-    
+
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
         print("Generate text using available free models.")
         """Generate text using available free models."""
@@ -268,21 +282,21 @@ class FreeLocalProvider(LLMProvider):
             if result:
                 print(f"Ollama generated text: {result}")
                 return result
-        
+
         # Try HuggingFace Inference API (free tier)
         result = self._huggingface_api_generate(prompt, max_tokens)
         if result:
             return result
-        
+
         # Try local HuggingFace model
         if self.huggingface_available:
             result = self._local_huggingface_generate(prompt, max_tokens)
             if result:
                 return result
-        
+
         # Last resort: intelligent mathematical problem solver
         return self._intelligent_mathematical_solver(prompt)
-    
+
     def _ollama_generate(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
         """Generate text using Ollama."""
         try:
@@ -290,38 +304,31 @@ class FreeLocalProvider(LLMProvider):
                 "model": "llama2",  # or "mistral"
                 "prompt": prompt,
                 "stream": False,
-                "options": {
-                    "num_predict": max_tokens,
-                    "temperature": 0.7
-                }
+                "options": {"num_predict": max_tokens, "temperature": 0.7},
             }
-            
+
             response = requests.post(
-                "http://localhost:11434/api/generate",
-                json=payload,
-                timeout=60
+                "http://localhost:11434/api/generate", json=payload, timeout=60
             )
-            
+
             if response.status_code == 200:
                 return response.json().get("response", "").strip()
-                
+
         except Exception as e:
             logger.warning(f"Ollama generation failed: {e}")
         return None
-    
-    def _huggingface_api_generate(self, prompt: str, max_tokens: int = 1000) -> Optional[str]:
+
+    def _huggingface_api_generate(
+        self, prompt: str, max_tokens: int = 1000
+    ) -> Optional[str]:
         """Generate text using HuggingFace Inference API (free tier)."""
         try:
             # Try multiple free models
-            models = [
-                "microsoft/DialoGPT-medium",
-                "gpt2",
-                "distilgpt2"
-            ]
-            
+            models = ["microsoft/DialoGPT-medium", "gpt2", "distilgpt2"]
+
             for model in models:
                 api_url = f"https://api-inference.huggingface.co/models/{model}"
-                
+
                 # No auth header needed for some public models
                 payload = {
                     "inputs": prompt,
@@ -329,41 +336,45 @@ class FreeLocalProvider(LLMProvider):
                         "max_new_tokens": min(max_tokens, 200),
                         "temperature": 0.7,
                         "do_sample": True,
-                        "return_full_text": False
-                    }
+                        "return_full_text": False,
+                    },
                 }
-                
+
                 response = requests.post(api_url, json=payload, timeout=20)
-                
+
                 if response.status_code == 200:
                     result = response.json()
                     if isinstance(result, list) and len(result) > 0:
                         generated_text = result[0].get("generated_text", "")
                         if generated_text and len(generated_text.strip()) > 10:
                             return generated_text.strip()
-                            
+
         except Exception as e:
             logger.warning(f"HuggingFace API generation failed: {e}")
         return None
-    
-    def _local_huggingface_generate(self, prompt: str, max_tokens: int = 500) -> Optional[str]:
+
+    def _local_huggingface_generate(
+        self, prompt: str, max_tokens: int = 500
+    ) -> Optional[str]:
         """Generate text using local HuggingFace model."""
         try:
             from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
             import torch
-            
+
             # Use a small, efficient model
             model_name = "microsoft/DialoGPT-small"
-            
+
             # Create pipeline with reduced memory usage
             generator = pipeline(
                 "text-generation",
                 model=model_name,
                 tokenizer=model_name,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None
+                torch_dtype=(
+                    torch.float16 if torch.cuda.is_available() else torch.float32
+                ),
+                device_map="auto" if torch.cuda.is_available() else None,
             )
-            
+
             # Generate response
             response = generator(
                 prompt,
@@ -371,226 +382,292 @@ class FreeLocalProvider(LLMProvider):
                 num_return_sequences=1,
                 temperature=0.7,
                 do_sample=True,
-                pad_token_id=generator.tokenizer.eos_token_id
+                pad_token_id=generator.tokenizer.eos_token_id,
             )
-            
-            generated_text = response[0]['generated_text']
+
+            generated_text = response[0]["generated_text"]
             # Remove the input prompt from the response
             if generated_text.startswith(prompt):
-                generated_text = generated_text[len(prompt):].strip()
-            
+                generated_text = generated_text[len(prompt) :].strip()
+
             return generated_text if generated_text else None
-            
+
         except Exception as e:
             logger.warning(f"Local HuggingFace generation failed: {e}")
         return None
-    
+
     def _intelligent_mathematical_solver(self, prompt: str) -> Optional[str]:
         """Generate actual mathematical solutions using SymPy and intelligent analysis."""
         logger.info("Using intelligent mathematical problem solver with SymPy")
-        
+
         try:
             # Extract question and options from prompt
             question_data = self._extract_question_from_prompt(prompt)
-            
-            logger.info(f"Question data extracted: subject='{question_data['subject']}', has_question='{bool(question_data['question_text'])}'")
-            
-            if question_data['question_text'] and question_data['subject'] == 'Quant':
-                logger.info(f"Using mathematical solver for Quant question: '{question_data['question_text'][:100]}...'")
+
+            logger.info(
+                f"Question data extracted: subject='{question_data['subject']}', has_question='{bool(question_data['question_text'])}'"
+            )
+
+            if question_data["question_text"] and question_data["subject"] == "Quant":
+                logger.info(
+                    f"Using mathematical solver for Quant question: '{question_data['question_text'][:100]}...'"
+                )
                 # Use mathematical solver ONLY for quantitative questions
                 solution = self.math_solver.solve_problem(
-                    question_data['question_text'], 
-                    question_data.get('options', [])
+                    question_data["question_text"], question_data.get("options", [])
                 )
                 return self._format_math_solution(solution)
             else:
                 # Fall back to contextual templates for non-math questions
-                logger.info(f"Using contextual templates for subject '{question_data['subject']}'")
+                logger.info(
+                    f"Using contextual templates for subject '{question_data['subject']}'"
+                )
                 # Use the already correctly extracted subject instead of re-detecting it
                 question_info = self._extract_question_info(prompt)
-                question_info['subject'] = question_data['subject']  # Override with correct subject
+                question_info["subject"] = question_data[
+                    "subject"
+                ]  # Override with correct subject
                 return self._generate_contextual_response(question_info, prompt)
-                
+
         except Exception as e:
             logger.error(f"Mathematical solver failed: {e}")
             # Ultimate fallback
             question_info = self._extract_question_info(prompt)
             return self._generate_contextual_response(question_info, prompt)
-    
+
     def _extract_question_from_prompt(self, prompt: str) -> Dict[str, Any]:
         """Extract structured question data from the LLM prompt."""
         # Parse prompt to extract question components
         question_data = {
-            'question_text': '',
-            'options': [],
-            'subject': 'General',
-            'correct_answer': None
+            "question_text": "",
+            "options": [],
+            "subject": "General",
+            "correct_answer": None,
         }
-        
+
         # Look for question patterns in the prompt
-        lines = prompt.split('\n')
-        
+        lines = prompt.split("\n")
+
         # Try to find the actual question text
         question_text = ""
         options = []
-        subject = 'General'
-        
+        subject = "General"
+
         # Handle the structured prompt format from LLM flow
         in_question_section = False
         in_options_section = False
-        
+
         for line in lines:
             line = line.strip()
-            
+
             # Check for subject in the prompt
-            if 'CAT' in line and ('Quant' in line or 'Verbal' in line or 'Logic' in line or 'DI' in line):
-                if 'Quant' in line:
-                    subject = 'Quant'
-                elif 'Verbal' in line:
-                    subject = 'Verbal'
-                elif 'Logic' in line:
-                    subject = 'Logic'
-                elif 'DI' in line:
-                    subject = 'DI'
-            
+            if "CAT" in line and (
+                "Quant" in line or "Verbal" in line or "Logic" in line or "DI" in line
+            ):
+                if "Quant" in line:
+                    subject = "Quant"
+                elif "Verbal" in line:
+                    subject = "Verbal"
+                elif "Logic" in line:
+                    subject = "Logic"
+                elif "DI" in line:
+                    subject = "DI"
+
             # Look for question section
-            if '**Question:**' in line:
+            if "**Question:**" in line:
                 in_question_section = True
                 continue
-            elif '**Options:**' in line:
+            elif "**Options:**" in line:
                 in_question_section = False
                 in_options_section = True
                 continue
-            elif '**Correct Answer:**' in line or '**Additional Context:**' in line:
+            elif "**Correct Answer:**" in line or "**Additional Context:**" in line:
                 in_options_section = False
                 continue
-            
+
             # Extract question text
-            if in_question_section and line and not line.startswith('**'):
+            if in_question_section and line and not line.startswith("**"):
                 question_text = line
-            
+
             # Extract options
-            if in_options_section and line and (line.startswith('A.') or line.startswith('B.') or line.startswith('C.') or line.startswith('D.')):
+            if (
+                in_options_section
+                and line
+                and (
+                    line.startswith("A.")
+                    or line.startswith("B.")
+                    or line.startswith("C.")
+                    or line.startswith("D.")
+                )
+            ):
                 options.append(line[3:].strip())  # Remove "A. " prefix
-            
+
             # Fallback: look for mathematical expressions in any line
-            if not question_text and line and ('=' in line or 'log' in line.lower() or any(op in line for op in ['+', '-', '×', '÷'])):
+            if (
+                not question_text
+                and line
+                and (
+                    "=" in line
+                    or "log" in line.lower()
+                    or any(op in line for op in ["+", "-", "×", "÷"])
+                )
+            ):
                 # Likely contains the mathematical question
                 if len(line) > 10:
                     question_text = line
-        
-        question_data.update({
-            'question_text': question_text,
-            'options': options,
-            'subject': subject
-        })
-        
-        logger.debug(f"Extracted question data: subject={subject}, question='{question_text[:50]}...', options={len(options)}")
-        
+
+        question_data.update(
+            {"question_text": question_text, "options": options, "subject": subject}
+        )
+
+        logger.debug(
+            f"Extracted question data: subject={subject}, question='{question_text[:50]}...', options={len(options)}"
+        )
+
         return question_data
-    
+
     def _format_math_solution(self, solution: MathSolution) -> str:
         """Format mathematical solution for educational video content."""
         formatted_solution = f"## {solution.problem_type.title()} Problem Solution\n\n"
-        
+
         # Add confidence indicator
-        confidence_text = "High" if solution.confidence > 0.8 else "Medium" if solution.confidence > 0.6 else "Low"
-        formatted_solution += f"**Confidence Level**: {confidence_text} ({solution.confidence:.1%})\n\n"
-        
+        confidence_text = (
+            "High"
+            if solution.confidence > 0.8
+            else "Medium" if solution.confidence > 0.6 else "Low"
+        )
+        formatted_solution += (
+            f"**Confidence Level**: {confidence_text} ({solution.confidence:.1%})\n\n"
+        )
+
         # Add each step
         for step in solution.steps:
             formatted_solution += f"### Step {step.step_number}: {step.description}\n\n"
-            
+
             if step.equation:
                 formatted_solution += f"**Equation**: {step.equation}\n\n"
-            
+
             if step.result:
                 formatted_solution += f"**Result**: {step.result}\n\n"
-            
+
             if step.explanation:
                 formatted_solution += f"**Explanation**: {step.explanation}\n\n"
-            
+
             formatted_solution += "---\n\n"
-        
+
         # Add final answer
         formatted_solution += f"### Final Answer\n\n**{solution.final_answer}**\n\n"
-        
+
         # Add verification
         if solution.verification:
             formatted_solution += f"### Verification\n\n{solution.verification}\n\n"
-        
+
         # Add complexity note
         formatted_solution += f"*Solution Complexity*: {solution.time_complexity}\n\n"
-        
+
         formatted_solution += "*This solution was generated using advanced symbolic mathematics (SymPy) with step-by-step analysis.*"
-        
+
         return formatted_solution
-    
+
     def _extract_question_info(self, prompt: str) -> Dict[str, Any]:
         """Extract relevant information from the prompt."""
         prompt_lower = prompt.lower()
-        
+
         info = {
-            'subject': 'General',
-            'question_type': 'general',
-            'key_concepts': [],
-            'has_calculation': False,
-            'has_options': 'options' in prompt_lower or 'choice' in prompt_lower,
-            'complexity': 'medium'
+            "subject": "General",
+            "question_type": "general",
+            "key_concepts": [],
+            "has_calculation": False,
+            "has_options": "options" in prompt_lower or "choice" in prompt_lower,
+            "complexity": "medium",
         }
-        
+
         # Determine subject
-        if any(word in prompt_lower for word in ['logarithm', 'log', 'equation', 'algebra', 'geometry', 'trigonometry', 'calculus']):
-            info['subject'] = 'Quant'
-            info['question_type'] = 'mathematical'
-        elif any(word in prompt_lower for word in ['passage', 'author', 'paragraph', 'text', 'reading']):
-            info['subject'] = 'Verbal'
-            info['question_type'] = 'comprehension'
-        elif any(word in prompt_lower for word in ['logic', 'reasoning', 'sequence', 'pattern', 'deduce']):
-            info['subject'] = 'Logic'
-            info['question_type'] = 'reasoning'
-        elif any(word in prompt_lower for word in ['data', 'table', 'chart', 'graph', 'interpretation']):
-            info['subject'] = 'DI'
-            info['question_type'] = 'data_analysis'
-        
+        if any(
+            word in prompt_lower
+            for word in [
+                "logarithm",
+                "log",
+                "equation",
+                "algebra",
+                "geometry",
+                "trigonometry",
+                "calculus",
+            ]
+        ):
+            info["subject"] = "Quant"
+            info["question_type"] = "mathematical"
+        elif any(
+            word in prompt_lower
+            for word in ["passage", "author", "paragraph", "text", "reading"]
+        ):
+            info["subject"] = "Verbal"
+            info["question_type"] = "comprehension"
+        elif any(
+            word in prompt_lower
+            for word in ["logic", "reasoning", "sequence", "pattern", "deduce"]
+        ):
+            info["subject"] = "Logic"
+            info["question_type"] = "reasoning"
+        elif any(
+            word in prompt_lower
+            for word in ["data", "table", "chart", "graph", "interpretation"]
+        ):
+            info["subject"] = "DI"
+            info["question_type"] = "data_analysis"
+
         # Check for calculations
-        if any(char in prompt for char in ['=', '+', '-', '×', '÷', '*', '/', '^']):
-            info['has_calculation'] = True
-        
+        if any(char in prompt for char in ["=", "+", "-", "×", "÷", "*", "/", "^"]):
+            info["has_calculation"] = True
+
         # Extract key concepts
-        math_concepts = ['logarithm', 'quadratic', 'probability', 'percentage', 'ratio', 'proportion']
+        math_concepts = [
+            "logarithm",
+            "quadratic",
+            "probability",
+            "percentage",
+            "ratio",
+            "proportion",
+        ]
         for concept in math_concepts:
             if concept in prompt_lower:
-                info['key_concepts'].append(concept)
-        
+                info["key_concepts"].append(concept)
+
         return info
-    
+
     def _generate_contextual_response(self, info: Dict[str, Any], prompt: str) -> str:
         """Generate a contextual response based on extracted information."""
-        
+
         # Debug logging
-        logger.info(f"Contextual response - Subject detected: '{info['subject']}', Question type: '{info['question_type']}'")
-        
-        if info['subject'] == 'Quant' and 'logarithm' in info['key_concepts']:
+        logger.info(
+            f"Contextual response - Subject detected: '{info['subject']}', Question type: '{info['question_type']}'"
+        )
+
+        if info["subject"] == "Quant" and "logarithm" in info["key_concepts"]:
             return self._generate_logarithm_solution(prompt)
-        elif info['subject'] == 'Quant' and info['has_calculation']:
+        elif info["subject"] == "Quant" and info["has_calculation"]:
             return self._generate_calculation_solution(prompt, info)
-        elif info['subject'] == 'Verbal':
+        elif info["subject"] == "Verbal":
             logger.info("Using reading comprehension solution for Verbal question")
             return self._generate_reading_solution(prompt)
-        elif info['subject'] == 'Logic':
+        elif info["subject"] == "Logic":
             # Check if this is a sequence problem that needs mathematical solving
-            if 'sequence' in prompt.lower() and any(word in prompt.lower() for word in ['number', 'sum', 'arithmetic', 'geometric', 'fibonacci']):
+            if "sequence" in prompt.lower() and any(
+                word in prompt.lower()
+                for word in ["number", "sum", "arithmetic", "geometric", "fibonacci"]
+            ):
                 logger.info("Using mathematical approach for Logic sequence question")
                 return self._generate_sequence_solution(prompt)
             else:
                 return self._generate_logic_solution(prompt)
-        elif info['subject'] == 'DI':
+        elif info["subject"] == "DI":
             return self._generate_di_solution(prompt)
         else:
-            logger.warning(f"No specific template found for subject '{info['subject']}', using general template")
+            logger.warning(
+                f"No specific template found for subject '{info['subject']}', using general template"
+            )
             return self._general_template_response()
-    
+
     def _generate_logarithm_solution(self, prompt: str) -> str:
         """Generate solution for logarithm problems."""
         return """
@@ -621,7 +698,7 @@ xy = 8 × 4 = 32
 
 *This solution demonstrates the systematic application of logarithm properties to solve the given system of equations.*
         """
-    
+
     def _generate_calculation_solution(self, prompt: str, info: Dict[str, Any]) -> str:
         """Generate solution for calculation-based problems."""
         return f"""
@@ -654,7 +731,7 @@ This is a {info['subject']} problem involving mathematical calculations.
 
 *For this specific problem, follow the systematic approach above, applying the relevant mathematical concepts and formulas.*
         """
-    
+
     def _generate_reading_solution(self, prompt: str) -> str:
         """Generate solution for reading comprehension."""
         return """
@@ -687,19 +764,19 @@ This is a {info['subject']} problem involving mathematical calculations.
 
 *The key to reading comprehension is staying close to the text and avoiding assumptions beyond what's explicitly stated or clearly implied.*
         """
-    
+
     def _generate_sequence_solution(self, prompt: str) -> str:
         """Generate solution for sequence problems with actual calculations."""
         # Extract sequence details from prompt
-        lines = prompt.split('\n')
+        lines = prompt.split("\n")
         question_text = ""
         for line in lines:
-            if line.strip() and not line.startswith('**') and not line.startswith('#'):
-                if 'sequence' in line.lower():
+            if line.strip() and not line.startswith("**") and not line.startswith("#"):
+                if "sequence" in line.lower():
                     question_text = line.strip()
                     break
-        
-        # The problem: "every third number is the sum of the previous two numbers" 
+
+        # The problem: "every third number is the sum of the previous two numbers"
         # This means: positions 3, 6, 9, etc. follow the sum rule
         return """
 ## Sequence Problem Solution
@@ -746,7 +823,7 @@ Based on the given correct answer: **A (21)**
 The sequence is: 1, 2, 3, 5, 8, 13, 21, 34
 Answer A (21) corresponds to the 7th position in this sequence.
         """
-    
+
     def _generate_logic_solution(self, prompt: str) -> str:
         """Generate solution for logical reasoning problems."""
         return """
@@ -779,7 +856,7 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Success in logical reasoning comes from careful analysis and systematic application of logical principles.*
         """
-    
+
     def _generate_di_solution(self, prompt: str) -> str:
         """Generate solution for data interpretation problems."""
         return """
@@ -812,7 +889,7 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Data interpretation success depends on careful reading of data presentations and accurate mathematical analysis.*
         """
-    
+
     def _math_template_response(self) -> str:
         """Template for mathematical questions."""
         return """
@@ -843,7 +920,7 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Note: For detailed step-by-step solutions, consider setting up OpenAI or Anthropic API keys.*
         """
-    
+
     def _logic_template_response(self) -> str:
         """Template for logical reasoning questions."""
         return """
@@ -871,7 +948,7 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Note: For detailed logical analysis, consider setting up OpenAI or Anthropic API keys.*
         """
-    
+
     def _verbal_template_response(self) -> str:
         """Template for verbal/reading comprehension questions."""
         return """
@@ -899,7 +976,7 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Note: For detailed textual analysis, consider setting up OpenAI or Anthropic API keys.*
         """
-    
+
     def _general_template_response(self) -> str:
         """General template for any question type."""
         return """
@@ -927,57 +1004,60 @@ Answer A (21) corresponds to the 7th position in this sequence.
 
 *Note: For detailed AI-generated explanations, consider setting up OpenAI or Anthropic API keys.*
         """
-    
+
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """Generate simple hash-based embedding."""
         import hashlib
+
         text_hash = hashlib.sha256(text.encode()).hexdigest()
         # Convert to pseudo-embedding (1536 dimensions)
         embedding = []
         for i in range(0, len(text_hash), 2):
-            val = int(text_hash[i:i+2], 16) / 255.0 - 0.5  # Normalize to [-0.5, 0.5]
+            val = (
+                int(text_hash[i : i + 2], 16) / 255.0 - 0.5
+            )  # Normalize to [-0.5, 0.5]
             embedding.append(val)
-        
+
         # Pad or truncate to 1536 dimensions
         while len(embedding) < 1536:
-            embedding.extend(embedding[:min(len(embedding), 1536 - len(embedding))])
+            embedding.extend(embedding[: min(len(embedding), 1536 - len(embedding))])
         return embedding[:1536]
 
 
 class LLMFactory:
     """Factory for creating LLM providers based on configuration."""
-    
+
     @staticmethod
     def create_provider() -> LLMProvider:
         """Create appropriate LLM provider based on available API keys."""
-        
+
         # Try OpenAI first
         if config.openai_api_key:
             logger.info("Using OpenAI provider")
             return OpenAIProvider(config.openai_api_key)
-        
+
         # Try Anthropic second
         if config.anthropic_api_key:
             logger.info("Using Anthropic provider")
             return AnthropicProvider(config.anthropic_api_key)
-        
+
         # Fallback to free provider
         logger.info("No paid API keys found, using free local provider")
         return FreeLocalProvider()
-    
+
     @staticmethod
     def get_available_providers() -> List[str]:
         """Get list of available providers."""
         providers = []
-        
+
         if config.openai_api_key:
             providers.append("OpenAI")
-        
+
         if config.anthropic_api_key:
             providers.append("Anthropic")
-        
+
         providers.append("Free Local")
-        
+
         return providers
 
 
